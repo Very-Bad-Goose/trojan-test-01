@@ -87,4 +87,50 @@ int main()
         SSL_CTX_free(ssl_ctx);
         closesocket(sock);
         WSACleanup();
-        return
+        return 1;
+    }
+
+    // create an SSL connection and attach it to the socket
+    ssl = SSL_new(ssl_ctx);
+    SSL_set_fd(ssl, sock);
+    if (SSL_connect(ssl) == -1) {
+        printf("(!) Failed to create SSL connection\n");
+        SSL_CTX_free(ssl_ctx);
+        SSL_free(ssl);
+        closesocket(sock);
+        WSACleanup();
+        return 1;
+    }
+    
+    // send a message to the server
+    char send_msg[512] = "Hello from the client!";
+    if (SSL_write(ssl, send_msg, strlen(send_msg)) <= 0) {
+        printf("(!) Failed to send message to the server\n");
+        SSL_free(ssl);
+        SSL_CTX_free(ssl_ctx);
+        closesocket(sock);
+        WSACleanup();
+        return 1;
+    }
+
+    // receive the server's response
+    char recv_msg[512];
+    int bytes_received = SSL_read(ssl, recv_msg, sizeof(recv_msg) - 1);
+    if (bytes_received <= 0) {
+        printf("(!) Failed to receive response from the server\n");
+        SSL_free(ssl);
+        SSL_CTX_free(ssl_ctx);
+        closesocket(sock);
+        WSACleanup();
+        return 1;
+    }
+    recv_msg[bytes_received] = '\0'; // null-terminate the received message
+    printf("Received from server: %s\n", recv_msg);
+
+    // clean up
+    SSL_free(ssl);
+    SSL_CTX_free(ssl_ctx);
+    closesocket(sock);
+    WSACleanup();
+    return 0;
+}
